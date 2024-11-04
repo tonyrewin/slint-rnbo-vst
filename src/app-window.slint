@@ -1,0 +1,315 @@
+component GroupBox {
+    in property <string> title;
+    in property <length> group-padding: 12px;
+    
+    VerticalLayout {
+        spacing: 0px;
+        Text {
+            text: root.title;
+            font-size: 16px;
+            font-weight: 600;
+            color: #00E5FF;
+        }
+        
+        Rectangle {
+            border-width: 1px;
+            border-color: #00E5FF40;
+            background: #ffffff08;
+            border-radius: 2px;
+            padding: root.group-padding;
+            @children
+        }
+    }
+}
+
+
+component GenSlider {
+    in-out property <float> value;
+    in property <float> minimum: 0;
+    in property <float> maximum: 100;
+    private property <float> normalized-value: (value - minimum) / (maximum - minimum);
+    private property <float> temp-value: value;
+    private property <bool> is-dragging: false;
+    private property <float> display-value: value;
+    
+    callback value-changed(float);
+    
+    width: 42px;
+    height: 235px;
+
+    Rectangle {
+        width: 100%;
+        height: 100%;
+        background: transparent;
+
+        // Маска для заполнения
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+            border-radius: 10px;
+            clip: true;
+
+            // Заполненная часть
+            Rectangle {
+                x: 0;
+                y: parent.height - (parent.height * (root.is-dragging ? root.normalized-value : root.display-value));
+                width: parent.width;
+                height: parent.height * (root.is-dragging ? root.normalized-value : root.display-value);
+                background: #6D3232;
+            }
+        }
+
+        // Рамка
+        Rectangle {
+            x: 0;
+            y: 0;
+            width: parent.width;
+            height: parent.height;
+            border-radius: 10px;
+            border-width: 1px;
+            border-color: white;
+            background: transparent;
+        }
+
+        // Значение
+        Text {
+            x: (parent.width - self.width) / 2;
+            y: 16px;
+            text: round(root.value) + "";
+            color: white;
+            font-family: "JetBrains Mono";
+            font-size: 14px;
+            font-weight: 500;
+        }
+
+        TouchArea {
+            width: parent.width;
+            height: parent.height;
+            pointer-event(event) => {
+                if (event.button == PointerEventButton.left && event.kind == PointerEventKind.down) {
+                    root.is-dragging = true;
+                    root.temp-value = root.maximum - (root.maximum - root.minimum) * 
+                        (self.mouse-y / parent.height);
+                    root.value = root.temp-value;
+                    root.display-value = root.normalized-value;
+                }
+                if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) {
+                    root.is-dragging = false;
+                    root.value = root.temp-value;
+                    root.value-changed(root.value);
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    root.temp-value = Math.max(root.minimum, 
+                        Math.min(root.maximum,
+                            root.maximum - (root.maximum - root.minimum) * 
+                            (self.mouse-y / parent.height)
+                        )
+                    );
+                    root.value = root.temp-value;
+                    root.display-value = root.normalized-value;
+                }
+            }
+        }
+    }
+}
+
+export component MainWindow inherits Window {
+    width: 800px;
+    height: 500px;
+    background: @linear-gradient(180deg, #1A1A2E 0%, #16213E 100%);
+    
+    Rectangle {
+        Image {
+            width: parent.width;
+            height: parent.height;
+            source: @image-url("resource/bg.jpg");
+        }
+        
+        // Индикатор сброса
+        if pull-offset > 0px : Rectangle { 
+            height: root.pull-offset;
+            background: root.reset-ready ? #FF000020 : #00E5FF20;
+            
+            Text {
+                text: root.reset-ready ? "release to refresh" : "pull to refresh";
+                color: root.reset-ready ? red : #00E5FF;
+                font-size: 14px;
+                y: parent.height / 2 - self.height / 2;
+                horizontal-alignment: center;
+            }
+        }
+        
+        TouchArea {
+            width: parent.width;
+            height: 50px;
+            y: root.pull-offset;
+            
+            moved => {
+                if (self.pressed) {
+                    root.pull-offset = max(0px, self.mouse-y);
+                    root.reset-ready = root.pull-offset > 100px;
+                }
+            }
+            
+            pointer-event(event) => {
+                if (event.button == PointerEventButton.left && event.kind == PointerEventKind.up) {
+                    if (root.reset-ready) {
+                        // Сброс всех значений
+                        root.base-freq = 100.0;
+                        root.q1 = 1.0;
+                        root.midgain = 1.0;
+                        root.sidegain = 1.0;
+                        root.spread = 100.0;
+                        root.angle = 0.5;
+                        root.feedback = 0.1;
+                    }
+                    root.pull-offset = 0px;
+                    root.reset-ready = false;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            y: root.pull-offset;
+            padding: 24px;
+            spacing: 24px;
+
+            // Основные параметры
+            GroupBox {
+                horizontal-stretch: 1;
+                
+                HorizontalLayout {
+                    spacing: 16px;
+                    alignment: space-around;
+                    
+                    VerticalLayout {
+                        alignment: center;
+                        Text { 
+                            text: "Base Frequency"; 
+                            color: white; 
+                            horizontal-alignment: center;
+                            font-family: "system";
+                            font-weight: 700;
+                        }
+                        GenSlider {
+                            height: 200px;
+                            maximum: 100;
+                            value <=> root.base_freq;
+                        }
+                        Text { 
+                            text: round(root.base_freq) + " Hz"; 
+                            color: white;
+                            font-family: "system";
+                            font-weight: 500;
+                        }
+                    }
+                    
+                    VerticalLayout {
+                        alignment: center;
+                        Text { text: "Q Factor"; color: white; horizontal-alignment: center; }
+                        GenSlider {
+                            height: 200px;
+                            maximum: 1;
+                            value <=> root.q1;
+                        }
+                        Text { text: round(root.q1 * 100) / 100; color: white; }
+                    }
+                }
+            }
+
+            // Параметры усиления
+            GroupBox {
+                title: "Gain";
+                horizontal-stretch: 1;
+                
+                HorizontalLayout {
+                    spacing: 16px;
+                    alignment: space-around;
+                    
+                    VerticalLayout {
+                        alignment: center;
+                        Text { text: "Mid Gain"; color: white; horizontal-alignment: center; }
+                        GenSlider {
+                            height: 200px;
+                            maximum: 1;
+                            value <=> root.midgain;
+                        }
+                        Text { text: round(root.midgain * 100) + "%"; color: white; }
+                    }
+                    
+                    VerticalLayout {
+                        alignment: center;
+                        Text { text: "Side Gain"; color: white; horizontal-alignment: center; }
+                        GenSlider {
+                            height: 200px;
+                            maximum: 1;
+                            value <=> root.sidegain;
+                        }
+                        Text { text: round(root.sidegain * 100) + "%"; color: white; }
+                    }
+                }
+            }
+
+            // Пространственные параметры
+            GroupBox {
+                title: "Spatial";
+                horizontal-stretch: 1;
+                
+                HorizontalLayout {
+                    spacing: 16px;
+                    alignment: space-around;
+                    
+                    VerticalLayout {
+                        alignment: center;
+                        Text { text: "Spread"; color: white; horizontal-alignment: center; }
+                        GenSlider {
+                            height: 200px;
+                            maximum: 100;
+                            value <=> root.spread;
+                        }
+                        Text { text: round(root.spread) + "%"; color: white; }
+                    }
+                    
+                    VerticalLayout {
+                        alignment: center;
+                        Text { text: "Angle"; color: white; horizontal-alignment: center; }
+                        GenSlider {
+                            height: 200px;
+                            maximum: 0.5;
+                            value <=> root.angle;
+                        }
+                        Text { text: round(root.angle * 360) + "°"; color: white; }
+                    }
+                    
+                    VerticalLayout {
+                        alignment: center;
+                        Text { text: "Feedback"; color: white; horizontal-alignment: center; }
+                        GenSlider {
+                            height: 200px;
+                            maximum: 0.1;
+                            value <=> root.feedback;
+                        }
+                        Text { text: round(root.feedback * 100) + "%"; color: white; }
+                    }
+                }
+            }
+        }
+    }
+
+    // Свойства для привязки параметров
+    property<float> base_freq: 100.0;
+    property<float> q1: 1.0;
+    property<float> midgain: 1.0;
+    property<float> sidegain: 1.0;
+    property<float> spread: 100.0;
+    property<float> angle: 0.5;
+    property<float> feedback: 0.1;
+    private property <length> pull-offset: 0px;
+    private property <bool> reset-ready: false;
+
+    callback param_value_changed(string, float);
+}
